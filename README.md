@@ -1,1 +1,3 @@
 # GCalSync
+
+Initial version
