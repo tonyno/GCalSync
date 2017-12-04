@@ -43,6 +43,9 @@ public class OneWaySync
     /** Optional - Dry run without changing destination calendar? */
     private boolean dryRun;
 
+    /** Optional - maximum events to be synchronized, for debuging purposes */
+    private int maximumEvents;
+
     /** Optional - appendix what is added to event name */
     private String summaryAppendix;
 
@@ -84,6 +87,12 @@ public class OneWaySync
         destinationEventColor = settings.getNonmandatoryProperty(prefix, "color");
         sourceRuntimeSettings = new RuntimeSettings(settings.getProperty(prefix, "source.lastSyncTokenFile"));
         dryRun = settings.getNonmandatoryProperty(prefix, "dryRun").equalsIgnoreCase("TRUE");
+
+        String maxEvents =  settings.getNonmandatoryProperty(prefix, "maximumEvents");
+        if (maxEvents != null && !maxEvents.equals(""))
+            maximumEvents = Integer.parseInt(maxEvents);
+        else
+            maximumEvents = 0;
 
         summaryAppendix = settings.getNonmandatoryProperty(prefix, "summary.appendix");
         if (!summaryAppendix.equals("")) summaryAppendix = " " + summaryAppendix;
@@ -137,7 +146,10 @@ public class OneWaySync
                         numberOfEvents++;
                         syncEvent(event, destinationCalendar);
                         Thread.sleep(5*1000);
-                        // return;
+
+                        if (maximumEvents != 0 && numberOfEvents >= maximumEvents)
+                            break;
+
                     }
                     catch (Exception e)
                     {
