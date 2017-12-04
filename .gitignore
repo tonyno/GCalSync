@@ -12,3 +12,4 @@ gcalsync.iml
 log/
 conf/client_secret.json
 conf/settings**
+conf/config.properties
