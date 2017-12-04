@@ -44,7 +44,7 @@ public class RuntimeSettings
 
     public void save()
     {
-        prop.setProperty("lastSyncToken", lastSyncToken);
+        if (lastSyncToken != null) prop.setProperty("lastSyncToken", lastSyncToken);
 
         output = null;
         try

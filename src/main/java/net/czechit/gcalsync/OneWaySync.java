@@ -145,13 +145,12 @@ public class OneWaySync
             {
                 for (Event event : items) {
                     try {
-                        numberOfEvents++;
-                        syncEvent(event, destinationCalendar);
-                        Thread.sleep(5*1000);
-
-                        if (maximumEvents != 0 && numberOfEvents >= maximumEvents)
-                            break tokenLoop;
-
+                        if (maximumEvents == 0 || numberOfEvents < maximumEvents)
+                        {
+                            numberOfEvents++;
+                            syncEvent(event, destinationCalendar);
+                            Thread.sleep(5 * 1000);
+                        }
                     }
                     catch (Exception e)
                     {
@@ -164,7 +163,7 @@ public class OneWaySync
             pageToken = events.getNextPageToken();
         } while (pageToken != null);
 
-        syncToken = events.getNextSyncToken();
+        syncToken = events.getNextSyncToken(); // be careful, if the loading of events is cancelled in the middle, then the syncToken is null, because if needs to be loaded from the begining
         logger.info(String.format("Synchronization done, number od events synchronized = %d, next syncToken = ", numberOfEvents, syncToken));
         sourceRuntimeSettings.setLastSyncToken(syncToken);
     }
