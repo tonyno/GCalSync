@@ -120,6 +120,8 @@ public class OneWaySync
         int numberOfEvents = 0;
         String pageToken = null;
         Events events = null;
+
+        tokenLoop:
         do {
             request.setPageToken(pageToken);
 
@@ -148,7 +150,7 @@ public class OneWaySync
                         Thread.sleep(5*1000);
 
                         if (maximumEvents != 0 && numberOfEvents >= maximumEvents)
-                            break;
+                            break tokenLoop;
 
                     }
                     catch (Exception e)
