@@ -5,6 +5,9 @@ import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
 
 import java.io.IOException;
+import java.math.BigInteger;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 // https://developers.google.com/google-apps/calendar/quickstart/java
 
@@ -18,7 +21,6 @@ public class Main
     public static void main( String[] args )
     {
         PropertyConfigurator.configure("conf/log4j.properties");
-        //OneWaySync.fixId("rva3c7gdfup1gp6hb408hkeu4c_R20171018T130000");
         mainRoutine();
     }
 

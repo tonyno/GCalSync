@@ -10,6 +10,9 @@ import org.apache.commons.codec.binary.Base32;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
+import java.math.BigInteger;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -84,7 +87,7 @@ public class OneWaySync
         sourceCalendarName = settings.getProperty(prefix, "source.calendar");
         destinationCalendarName = settings.getProperty(prefix, "destination.calendar");
 
-        destinationEventColor = settings.getNonmandatoryProperty(prefix, "color");
+        destinationEventColor = settings.getNonmandatoryProperty(prefix, "destination.color");
         sourceRuntimeSettings = new RuntimeSettings(settings.getProperty(prefix, "source.lastSyncTokenFile"));
         dryRun = settings.getNonmandatoryProperty(prefix, "dryRun").equalsIgnoreCase("TRUE");
 
@@ -155,7 +158,6 @@ public class OneWaySync
                     catch (Exception e)
                     {
                         logger.error("Problem during syncing " + event.getId() + " - " + event.getSummary(), e);
-                        // return; // TODO
                     }
                 }
             }
@@ -164,7 +166,7 @@ public class OneWaySync
         } while (pageToken != null);
 
         syncToken = events.getNextSyncToken(); // be careful, if the loading of events is cancelled in the middle, then the syncToken is null, because if needs to be loaded from the begining
-        logger.info(String.format("Synchronization done, number od events synchronized = %d, next syncToken = ", numberOfEvents, syncToken));
+        logger.info(String.format("Synchronization done, number od events synchronized = %d, next syncToken = %s", numberOfEvents, syncToken));
         sourceRuntimeSettings.setLastSyncToken(syncToken);
     }
 
@@ -226,16 +228,17 @@ public class OneWaySync
         }
 
         targetEvent.setSummary(Objects.toString(event.getSummary(), "") + summaryAppendix);
-        targetEvent.setDescription(Objects.toString(event.getDescription(), "") + descriptionAppendix);
+        targetEvent.setDescription(Objects.toString(event.getDescription(), "") + attendeesToDescription(event.getAttendees()) + descriptionAppendix);
         targetEvent.setLocation(event.getLocation());
         targetEvent.setStart(event.getStart());
         targetEvent.setEnd(event.getEnd());
         targetEvent.setReminders(event.getReminders());
         targetEvent.setStatus("confirmed");
-        targetEvent.setAttendees(event.getAttendees());
+        //targetEvent.setAttendees(filtersAttendees(event.getAttendees()));
 
         targetEvent.setRecurrence(event.getRecurrence());
         targetEvent.setRecurringEventId(event.getRecurringEventId());
+        targetEvent.setICalUID(event.getICalUID());
         targetEvent.setSequence(event.getSequence());
         // https://stackoverflow.com/questions/9691665/google-calendar-api-can-only-update-event-once
         // https://stackoverflow.com/questions/8574088/google-calendar-api-v3-re-update-issue
@@ -299,6 +302,24 @@ public class OneWaySync
         return newValue;
     }
 
+
+    private static String attendeesToDescription(List<EventAttendee> attendees)
+    {
+        if (attendees == null)
+            return "";
+
+        String retVal = "\n\n==============\nATTENDEES:\n";
+        for (EventAttendee e : attendees)
+        {
+            retVal += String.format("%s (%s) - status: %s%s\n",
+                    (e.getDisplayName() != null ? e.getDisplayName() : "-"),
+                    (e.getEmail().contains("resource.calendar.google.com") ? "--" : e.getEmail()),
+                    e.getResponseStatus(),
+                    (e.getComment() != null && !e.getComment().equals("")) ? (" (" + e.getComment() + ")") : "");
+        }
+        return retVal;
+    }
+
     private static List<EventAttendee> filtersAttendees(List<EventAttendee> attendees)
     {
         if (attendees == null)
@@ -311,7 +332,7 @@ public class OneWaySync
             String displayName = e.getDisplayName();
             if (displayName == null || displayName.equals(""))
                 e.setDisplayName(e.getEmail());
-            e.setEmail("nomail@gmail.com");
+            e.setEmail(String.format("%s@czechit.net", md5(e.getEmail())));
         }
         return newAttendees;
     } // csas.cz_70726168612d616e74616c61737461736b612d726970@resource.calendar.google.com
@@ -323,5 +344,19 @@ public class OneWaySync
     {
         sourceRuntimeSettings.save();
         sourceRuntimeSettings.close();
+    }
+
+    public static String md5(String input)
+    {
+        try
+        {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            md.update(input.getBytes());
+            return String.format("%032x", new BigInteger(1, md.digest()));
+        }
+        catch (NoSuchAlgorithmException e)
+        {
+            return "";
+        }
     }
 }
