@@ -6,6 +6,7 @@ import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.Event;
 import com.google.api.services.calendar.model.EventAttendee;
 import com.google.api.services.calendar.model.Events;
+import net.czechit.gcalsync.exceptions.RecurringEventNotFoundException;
 import org.apache.commons.codec.binary.Base32;
 import org.apache.log4j.Logger;
 
@@ -172,7 +173,13 @@ public class OneWaySync
 
     private void syncEvent(Event event, Calendar targetCalendar) throws IOException
     {
-        String sourceId = fixId(event.getId());
+        String debugAppendix = ""; // " (DEBUG)";
+        String sourceIdUnfixed = event.getId();
+        String sourceId = fixId(sourceIdUnfixed);
+        /*if (!( sourceId.equals("i1nq7ljbr3gcts543sd44i1j9002018010901230000") ||
+                sourceId.equals("3kjahtcc3jd463ro5dc5plkklk02018010900930000")))
+            return;*/
+
         Operation operation = Operation.UNKNOWN;
 
         String logMessage;
@@ -190,11 +197,36 @@ public class OneWaySync
         // We try to find corresponding event in destination calendar based on event id (event.getId())
         Event targetEvent = null;
         try {
-            targetEvent = targetCalendar.events().get(destinationCalendarName, sourceId).execute();
+
+            // Is it recurring event?
+            if (event.getRecurringEventId() != null && !event.getRecurringEventId().isEmpty())
+            {
+                // https://developers.google.com/google-apps/calendar/recurringevents
+                List<Event> recurringEvents = targetCalendar.events().instances(destinationCalendarName, event.getRecurringEventId()).setMaxResults(2000).execute().getItems();
+
+                logger.debug(String.format("Number of recurring events: %d", recurringEvents.size()));
+                found:
+                {
+                    for (Event recEvent : recurringEvents)
+                    {
+                        if (recEvent.getId().equals(sourceIdUnfixed))
+                        {
+                            logger.debug(String.format("This is the correct recurring event to be updated - id %s " +
+                                    "from %s to %s", recEvent.getId(), recEvent.getStart(), recEvent.getEnd()));
+                            targetEvent = recEvent;
+                            break found;
+                        }
+                    }
+                    throw new RecurringEventNotFoundException(String.format("Not found event %s", sourceIdUnfixed));
+                }
+            } else
+            {
+                targetEvent = targetCalendar.events().get(destinationCalendarName, sourceId).execute();
+            }
 
             // No exception raised = corresponding event in destination calendar exists
             logger.debug(String.format("   -> found in target calendar under id=%s, summary=%s, start=%s, status=%s",
-                    sourceId, targetEvent.getSummary(), targetEvent.getStart().toString(), targetEvent.getStatus()));
+                    targetEvent.getId(), targetEvent.getSummary(), targetEvent.getStart().toString(), targetEvent.getStatus()));
 
             if (operation == Operation.DELETE && targetEvent.getStatus().equalsIgnoreCase("cancelled"))
             {
@@ -206,9 +238,10 @@ public class OneWaySync
                 operation = Operation.UPDATE;
             }
         }
-        catch (GoogleJsonResponseException e)
+        catch (RecurringEventNotFoundException | GoogleJsonResponseException e)
         {
-            if (e.getStatusCode() == 404) // Corresponding event in destination calendar doesn't exist (HTTP code 404)
+            if (e instanceof RecurringEventNotFoundException ||
+                    ((GoogleJsonResponseException)e).getStatusCode() == 404) // Corresponding event in destination calendar doesn't exist (HTTP code 404)
             {
                 if (operation == Operation.DELETE) // We are asked to delete event, but it doesn't exist in destination calendar, so we just ignore the request
                 {
@@ -223,11 +256,11 @@ public class OneWaySync
                 operation = Operation.INSERT;
             } else {
                 logger.error("    -> other unknown GoogleJsonResponseException error", e);
-                throw e;
+                throw (GoogleJsonResponseException)e;
             }
         }
 
-        targetEvent.setSummary(Objects.toString(event.getSummary(), "") + summaryAppendix);
+        targetEvent.setSummary(Objects.toString(event.getSummary(), "") + summaryAppendix + debugAppendix);
         targetEvent.setDescription(Objects.toString(event.getDescription(), "") + attendeesToDescription(event.getAttendees()) + descriptionAppendix);
         targetEvent.setLocation(event.getLocation());
         targetEvent.setStart(event.getStart());
@@ -267,11 +300,11 @@ public class OneWaySync
                 break;
             case UPDATE:
                 // https://developers.google.com/google-apps/calendar/v3/reference/events/update
-                targetCalendar.events().update(destinationCalendarName, sourceId, targetEvent).execute();
+                targetCalendar.events().update(destinationCalendarName, targetEvent.getId(), targetEvent).execute();
                 logger.debug("Operation UPDATE finished");
                 break;
             case DELETE:
-                targetCalendar.events().delete(destinationCalendarName, sourceId).execute();
+                targetCalendar.events().delete(destinationCalendarName, targetEvent.getId()).execute();
                 logger.debug("Operation DELETE finished");
                 break;
             default:
