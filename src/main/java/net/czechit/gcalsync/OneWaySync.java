@@ -47,6 +47,9 @@ public class OneWaySync
     /** Optional - Dry run without changing destination calendar? */
     private boolean dryRun;
 
+    /** Optional - sleepTime (in msec) used between events syncing */
+    private int sleepTimeMsec = 1000;
+
     /** Optional - maximum events to be synchronized, for debuging purposes */
     private int maximumEvents;
 
@@ -73,6 +76,13 @@ public class OneWaySync
     {
         this.settings = settings;
         this.settingsPrefix = prefix;
+
+        String sleepTimeMSecStr = settings.getNonmandatoryGlobalProperty("sleepTimeMSec");
+
+        if (!sleepTimeMSecStr.isEmpty()) {
+            sleepTimeMsec = Integer.parseInt(sleepTimeMSecStr);
+        }
+
 
         sourcePrefix = String.format("account.%s", settings.getProperty(prefix, "source"));
         destinationPrefix = String.format("account.%s", settings.getProperty(prefix, "destination"));
@@ -153,7 +163,7 @@ public class OneWaySync
                         {
                             numberOfEvents++;
                             syncEvent(event, destinationCalendar);
-                            Thread.sleep(5 * 1000);
+                            Thread.sleep(sleepTimeMsec);
                         }
                     }
                     catch (Exception e)
@@ -271,7 +281,7 @@ public class OneWaySync
 
         targetEvent.setRecurrence(event.getRecurrence());
         targetEvent.setRecurringEventId(event.getRecurringEventId());
-        targetEvent.setICalUID(event.getICalUID());
+        //targetEvent.setICalUID(event.getICalUID());
         targetEvent.setSequence(event.getSequence());
         // https://stackoverflow.com/questions/9691665/google-calendar-api-can-only-update-event-once
         // https://stackoverflow.com/questions/8574088/google-calendar-api-v3-re-update-issue

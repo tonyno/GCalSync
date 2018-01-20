@@ -51,6 +51,17 @@ public class CalendarSettings
         return v;
     }
 
+    /**
+     * Returns global value from settings
+     * @param key
+     * @return
+     * @throws Exception if key doesn't exist
+     */
+    public String getNonmandatoryGlobalProperty(String key) throws Exception
+    {
+        String v = prop.getProperty(key,"");
+        return v;
+    }
 
     /**
      * Returns optional value from settings, if the item doesn't exist, returns empty string.
