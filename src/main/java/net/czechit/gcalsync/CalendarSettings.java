@@ -4,14 +4,14 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Properties;
 import java.io.InputStream;
-
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class CalendarSettings
 {
     private static String CONFIG_FILE_NAME = "conf/config.properties";
 
-    private final static Logger logger = Logger.getLogger(CalendarSettings.class);
+    private final static Logger logger = LoggerFactory.getLogger(CalendarSettings.class);
     private Properties prop = null;
     private InputStream input = null;
 

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- For assistance related to logback-translator or configuration  -->
+<!-- files in general, please contact the logback user mailing list -->
+<!-- at http://www.qos.ch/mailman/listinfo/logback-user             -->
+<!--                                                                -->
+<!-- For professional support please see                            -->
+<!--    http://www.qos.ch/shop/products/professionalSupport         -->
+<!--                                                                -->
+<configuration>
+  <contextListener class="ch.qos.logback.classic.jul.LevelChangePropagator">
+    <resetJUL>true</resetJUL>
+  </contextListener>
+
+  <appender name="default.out" class="ch.qos.logback.core.ConsoleAppender">
+    <encoding>UTF-8</encoding>
+    <encoder>
+      <pattern>%-5p %c: %m%n</pattern>
+    </encoder>
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>DEBUG</level>
+    </filter>
+  </appender>
+
+  <appender name="default.file" class="ch.qos.logback.core.FileAppender">
+    <encoding>UTF-8</encoding>
+    <append>true</append>
+    <file>log/gcalsync.log</file>
+    <encoder>
+      <pattern>%d{yyyyMMdd HH:mm:ss.SSS} [%5p] %C %M - %m%n</pattern>
+    </encoder>
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>DEBUG</level>
+    </filter>
+  </appender>
+
+  <root level="INFO">
+    <appender-ref ref="default.out"/>
+    <appender-ref ref="default.file"/>
+  </root>
+
+  <logger name="net.czechit.gcalsync" level="DEBUG" />
+  <!-- enable this to see details about google client communication -->
+  <!--logger name="com.google.api.client.http" level="TRACE"/-->
+</configuration>

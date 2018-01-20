@@ -1,14 +1,15 @@
 package net.czechit.gcalsync;
 
-import org.apache.log4j.Logger;
 
 import java.io.*;
 import java.util.Properties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class RuntimeSettings
 {
 
-    private final static Logger logger = Logger.getLogger(RuntimeSettings.class);
+    private final static Logger logger = LoggerFactory.getLogger(RuntimeSettings.class);
     private Properties prop = null;
     private InputStream input = null;
     private FileOutputStream output = null;

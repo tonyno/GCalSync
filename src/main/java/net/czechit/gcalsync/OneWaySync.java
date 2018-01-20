@@ -8,7 +8,6 @@ import com.google.api.services.calendar.model.EventAttendee;
 import com.google.api.services.calendar.model.Events;
 import net.czechit.gcalsync.exceptions.RecurringEventNotFoundException;
 import org.apache.commons.codec.binary.Base32;
-import org.apache.log4j.Logger;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -17,12 +16,14 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class OneWaySync
 {
     public enum Operation {UNKNOWN, INSERT, DELETE, UPDATE};
 
-    private final static Logger logger = Logger.getLogger(OneWaySync.class);
+    private final static Logger logger = LoggerFactory.getLogger(OneWaySync.class);
 
     private CalendarSettings settings;
 

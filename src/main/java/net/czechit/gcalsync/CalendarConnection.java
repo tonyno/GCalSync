@@ -19,7 +19,6 @@ import com.google.api.services.calendar.model.ColorDefinition;
 import com.google.api.services.calendar.model.Colors;
 import com.jcabi.aspects.LogExceptions;
 import com.jcabi.aspects.Loggable;
-import org.apache.log4j.Logger;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -29,11 +28,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class CalendarConnection
 {
 
-    final static Logger logger = Logger.getLogger(CalendarConnection.class);
+    final static Logger logger = LoggerFactory.getLogger(CalendarConnection.class);
 
     private com.google.api.services.calendar.Calendar service;
 
