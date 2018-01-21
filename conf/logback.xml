@@ -18,7 +18,7 @@
       <pattern>%-5p %c: %m%n</pattern>
     </encoder>
     <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-      <level>DEBUG</level>
+      <level>TRACE</level>
     </filter>
   </appender>
 
@@ -30,7 +30,7 @@
       <pattern>%d{yyyyMMdd HH:mm:ss.SSS} [%5p] %C %M - %m%n</pattern>
     </encoder>
     <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-      <level>DEBUG</level>
+      <level>TRACE</level>
     </filter>
   </appender>
 
@@ -42,4 +42,5 @@
   <logger name="net.czechit.gcalsync" level="DEBUG" />
   <!-- enable this to see details about google client communication -->
   <!--logger name="com.google.api.client.http" level="TRACE"/-->
+  <!--logger name="sun.net.www" level="TRACE"/-->
 </configuration>
