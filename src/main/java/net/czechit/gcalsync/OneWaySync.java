@@ -144,6 +144,7 @@ public class OneWaySync
                 events = request.execute();
             }
             catch (GoogleJsonResponseException e) {
+                logger.error(String.format("Exception during request execution, request = %s", request.toString()), e);
                 if (e.getStatusCode() == 410) {
                     // A 410 status code, "Gone", indicates that the sync token
                     // is invalid.
@@ -187,8 +188,8 @@ public class OneWaySync
         String debugAppendix = ""; // " (DEBUG)";
         String sourceIdUnfixed = event.getId();
         String sourceId = fixId(sourceIdUnfixed);
-        /*if (!( sourceId.equals("i1nq7ljbr3gcts543sd44i1j9002018010901230000") ||
-                sourceId.equals("3kjahtcc3jd463ro5dc5plkklk02018010900930000")))
+        /*if (!( sourceId.equals("0elin6eir68sj8cpl60q3gn9qbcq38c9p64qjic1g6sp3id1h74sj6n9qbcsjgchj6grjgd9m60oj8d1p6cqj0n8") ||
+                sourceId.equals("0elin6eir68sj8cpl6...0q3gn9qbcq38c9p64qjic1g6sq3cchg6crjgn9qbcsjgchj6grjgd9m60pj0dhp60s3gn8")))
             return;*/
 
         Operation operation = Operation.UNKNOWN;
@@ -236,8 +237,8 @@ public class OneWaySync
             }
 
             // No exception raised = corresponding event in destination calendar exists
-            logger.debug(String.format("   -> found in target calendar under id=%s, summary=%s, start=%s, status=%s",
-                    targetEvent.getId(), targetEvent.getSummary(), targetEvent.getStart().toString(), targetEvent.getStatus()));
+            logger.debug(String.format("   -> found in target calendar under id=%s, summary=%s, start=%s, status=%s, content=%s",
+                    targetEvent.getId(), targetEvent.getSummary(), targetEvent.getStart().toString(), targetEvent.getStatus(), targetEvent.toPrettyString()));
 
             if (operation == Operation.DELETE && targetEvent.getStatus().equalsIgnoreCase("cancelled"))
             {
@@ -282,7 +283,7 @@ public class OneWaySync
 
         targetEvent.setRecurrence(event.getRecurrence());
         targetEvent.setRecurringEventId(event.getRecurringEventId());
-        //targetEvent.setICalUID(event.getICalUID());
+        //targetEvent.setICalUID(event.getICalUID()); // never ever put this to new issues, it causes Invalid ID exceptions
         targetEvent.setSequence(event.getSequence());
         // https://stackoverflow.com/questions/9691665/google-calendar-api-can-only-update-event-once
         // https://stackoverflow.com/questions/8574088/google-calendar-api-v3-re-update-issue
