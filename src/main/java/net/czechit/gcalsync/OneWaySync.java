@@ -79,11 +79,9 @@ public class OneWaySync
         this.settingsPrefix = prefix;
 
         String sleepTimeMSecStr = settings.getNonmandatoryGlobalProperty("sleepTimeMSec");
-
         if (!sleepTimeMSecStr.isEmpty()) {
             sleepTimeMsec = Integer.parseInt(sleepTimeMSecStr);
         }
-
 
         sourcePrefix = String.format("account.%s", settings.getProperty(prefix, "source"));
         destinationPrefix = String.format("account.%s", settings.getProperty(prefix, "destination"));
@@ -116,6 +114,11 @@ public class OneWaySync
         skipSynchroDescriptionPattern = settings.getNonmandatoryProperty(prefix, "description.skipSynchroPattern");
     }
 
+    /**
+     * Main synchronization routine - takes configurations loaded in class constructor, takes lastSyncToken and perform
+     * the one way synchronization.
+     * @throws IOException
+     */
     public void sync() throws IOException
     {
         String syncToken = sourceRuntimeSettings.getLastSyncToken();
@@ -183,6 +186,13 @@ public class OneWaySync
         sourceRuntimeSettings.setLastSyncToken(syncToken);
     }
 
+
+    /**
+     * Sync one event to targetCalendar
+     * @param event one event being synchronized to targetCalendar
+     * @param targetCalendar calendar where the new event will be placed/updated to
+     * @throws IOException
+     */
     private void syncEvent(Event event, Calendar targetCalendar) throws IOException
     {
         String debugAppendix = ""; // " (DEBUG)";
@@ -207,39 +217,10 @@ public class OneWaySync
         logger.debug(String.format("Following event going to be synced, operation: %s, event: %s", logMessage, event.toPrettyString()));
 
         // We try to find corresponding event in destination calendar based on event id (event.getId())
-        Event targetEvent = null;
-        try {
+        Event targetEvent = findEvent(event, targetCalendar);
 
-            // Is it recurring event?
-            if (event.getRecurringEventId() != null && !event.getRecurringEventId().isEmpty())
-            {
-                // https://developers.google.com/google-apps/calendar/recurringevents
-                List<Event> recurringEvents = targetCalendar.events().instances(destinationCalendarName, event.getRecurringEventId()).setMaxResults(2000).execute().getItems();
-
-                logger.debug(String.format("Number of recurring events: %d", recurringEvents.size()));
-                found:
-                {
-                    for (Event recEvent : recurringEvents)
-                    {
-                        if (recEvent.getId().equals(sourceIdUnfixed))
-                        {
-                            logger.debug(String.format("This is the correct recurring event to be updated - id %s " +
-                                    "from %s to %s", recEvent.getId(), recEvent.getStart(), recEvent.getEnd()));
-                            targetEvent = recEvent;
-                            break found;
-                        }
-                    }
-                    throw new RecurringEventNotFoundException(String.format("Not found event %s", sourceIdUnfixed));
-                }
-            } else
-            {
-                targetEvent = targetCalendar.events().get(destinationCalendarName, sourceId).execute();
-            }
-
-            // No exception raised = corresponding event in destination calendar exists
-            logger.debug(String.format("   -> found in target calendar under id=%s, summary=%s, start=%s, status=%s, content=%s",
-                    targetEvent.getId(), targetEvent.getSummary(), targetEvent.getStart().toString(), targetEvent.getStatus(), targetEvent.toPrettyString()));
-
+        if (targetEvent != null) // the event is found in the target calendar
+        {
             if (operation == Operation.DELETE && targetEvent.getStatus().equalsIgnoreCase("cancelled"))
             {
                 logger.debug("   -> event is in target calendar marked as cancelled, so synchronization is skipped");
@@ -249,49 +230,27 @@ public class OneWaySync
             if (operation == Operation.UNKNOWN) { // if it is not DELETE operation already
                 operation = Operation.UPDATE;
             }
-        }
-        catch (RecurringEventNotFoundException | GoogleJsonResponseException e)
-        {
-            if (e instanceof RecurringEventNotFoundException ||
-                    ((GoogleJsonResponseException)e).getStatusCode() == 404) // Corresponding event in destination calendar doesn't exist (HTTP code 404)
+        } else { // event is not found in targetCalendar
+            if (operation == Operation.DELETE) // We are asked to delete event, but it doesn't exist in destination calendar, so we just ignore the request
             {
-                if (operation == Operation.DELETE) // We are asked to delete event, but it doesn't exist in destination calendar, so we just ignore the request
-                {
-                    logger.warn("   -> not found in target calendar and requested to be deleted, so ignoring");
-                    return;
-                }
-
-                targetEvent = new Event();
-                targetEvent.setId(sourceId);
-
-                logger.debug("   -> not found, creating new event");
-                operation = Operation.INSERT;
-            } else {
-                logger.error("    -> other unknown GoogleJsonResponseException error", e);
-                throw (GoogleJsonResponseException)e;
+                logger.warn("   -> not found in target calendar and requested to be deleted, so ignoring");
+                return;
             }
+
+            targetEvent = new Event();
+            targetEvent.setId(sourceId);
+
+            logger.debug("   -> not found, creating new event");
+            operation = Operation.INSERT;
         }
 
-        targetEvent.setSummary(Objects.toString(event.getSummary(), "") + summaryAppendix + debugAppendix);
-        targetEvent.setDescription(Objects.toString(event.getDescription(), "") + attendeesToDescription(event.getAttendees()) + descriptionAppendix);
-        targetEvent.setLocation(event.getLocation());
-        targetEvent.setStart(event.getStart());
-        targetEvent.setEnd(event.getEnd());
-        targetEvent.setReminders(event.getReminders());
-        targetEvent.setStatus("confirmed");
-        //targetEvent.setAttendees(filtersAttendees(event.getAttendees()));
-
-        targetEvent.setRecurrence(event.getRecurrence());
-        targetEvent.setRecurringEventId(event.getRecurringEventId());
-        //targetEvent.setICalUID(event.getICalUID()); // never ever put this to new issues, it causes Invalid ID exceptions
-        targetEvent.setSequence(event.getSequence());
-        // https://stackoverflow.com/questions/9691665/google-calendar-api-can-only-update-event-once
-        // https://stackoverflow.com/questions/8574088/google-calendar-api-v3-re-update-issue
-        if (! destinationEventColor.equals(""))
-            targetEvent.setColorId(destinationEventColor);
+        // Load data from event to targetEvent
+        syncEvent(event, targetEvent, debugAppendix);
 
         logger.info(String.format("Performing operation %s with following target event, id = %s, content = %s", operation, targetEvent.getId(), targetEvent.toPrettyString()));
 
+
+        // If description of the event contains special text saying "do not synchronize"....
         if (skipSynchroDescriptionPattern != null && !skipSynchroDescriptionPattern.equals("") &&
                 (event != null) && (event.getDescription() != null) && event.getDescription().contains(skipSynchroDescriptionPattern))
         {
@@ -299,8 +258,9 @@ public class OneWaySync
             return;
         }
 
+        // If it is just dry text - in the last moment before changing the data exit the routine
         if (dryRun) {
-            logger.debug("Dry run set, so no modification will be performed. Exitting syncEvent routine.");
+            logger.debug("Dry run set, so no modification will be performed. Exiting syncEvent routine.");
             return;
         }
 
@@ -322,7 +282,131 @@ public class OneWaySync
             default:
                 logger.error("Unknown operation - " + operation);
         }
+    }
 
+
+    /**
+     * Finds event using event.id in targetCalendar and returns that event as return value.
+     * It supports both one single event and also recurring events
+     * @param event to be searched in targetCalendar based on event.getId()
+     * @param targetCalendar calendar where the event is being searched
+     * @return null if event is not found or the particular Event what was found
+     * @throws IOException
+     */
+    private Event findEvent(Event event, Calendar targetCalendar) throws IOException
+    {
+        String sourceIdUnfixed = event.getId();
+        String sourceId = fixId(sourceIdUnfixed);
+
+        // We try to find corresponding event in destination calendar based on event id (event.getId())
+        Event targetEvent = null;
+        try {
+            if (event.getRecurringEventId() != null && !event.getRecurringEventId().isEmpty()) // Is it recurring event?
+            {
+                targetEvent = findRecurringEvent(event, targetCalendar);
+            } else
+            {
+                targetEvent = targetCalendar.events().get(destinationCalendarName, sourceId).execute();
+            }
+
+            // No exception raised = corresponding event in destination calendar exists
+            if (targetEvent == null)
+            {
+                logger.debug(String.format("   -> event %s not found in target calendar", sourceId));
+            } else
+            {
+                logger.debug(String.format("   -> found in target calendar under id=%s, summary=%s, start=%s, status=%s, content=%s",
+                        targetEvent.getId(), targetEvent.getSummary(), targetEvent.getStart().toString(), targetEvent.getStatus(), targetEvent.toPrettyString()));
+            }
+
+            /*if (operation == Operation.DELETE && targetEvent.getStatus().equalsIgnoreCase("cancelled"))
+            {
+                logger.debug("   -> event is in target calendar marked as cancelled, so synchronization is skipped");
+                return;
+            }
+
+            if (operation == Operation.UNKNOWN) { // if it is not DELETE operation already
+                operation = Operation.UPDATE;
+            }*/
+        }
+        catch (GoogleJsonResponseException e)
+        {
+            if (e.getStatusCode() == 404) // Corresponding event in destination calendar doesn't exist (HTTP code 404)
+            {
+                logger.debug(String.format("   -> event %s not found in target calendar (404 code)", sourceId));
+                targetEvent = null;
+            } else {
+                logger.error("    -> other unknown GoogleJsonResponseException error", e);
+                throw e;
+            }
+        }
+
+        return targetEvent; // return found targetEvent
+    }
+
+    /**
+     * Routine for searching recurring event in targetCalendar (used from findEvent method)
+     * @param event
+     * @param targetCalendar
+     * @return
+     * @throws IOException
+     */
+    private Event findRecurringEvent(Event event, Calendar targetCalendar) throws IOException
+    {
+        String sourceIdUnfixed = event.getId();
+        String sourceId = fixId(sourceIdUnfixed);
+
+        // https://developers.google.com/google-apps/calendar/recurringevents
+        List<Event> recurringEvents = targetCalendar.events().instances(destinationCalendarName, event.getRecurringEventId()).setMaxResults(2000).execute().getItems();
+
+        logger.debug(String.format("Number of recurring events: %d", recurringEvents.size()));
+        for (Event recEvent : recurringEvents)
+        {
+            if (recEvent.getId().equals(sourceIdUnfixed))
+            {
+                logger.debug(String.format("This is the correct recurring event to be updated - id %s " +
+                        "from %s to %s", recEvent.getId(), recEvent.getStart(), recEvent.getEnd()));
+                return recEvent; // event found
+            }
+        }
+        return null; // if event not found
+    }
+
+
+    /**
+     * Copies attributes from source event "event" to target event "targetEvent"
+     * @param event source event
+     * @param targetEvent target event
+     * @param debugAppendix optional appendix being put in the end of summary of all created events (for debuging purposes)
+     */
+    private void syncEvent(Event event, Event targetEvent, String debugAppendix)
+    {
+        targetEvent.setSummary(Objects.toString(event.getSummary(), "") + summaryAppendix + debugAppendix);
+        targetEvent.setDescription(Objects.toString(event.getDescription(), "") + attendeesToDescription(event.getAttendees()) + descriptionAppendix);
+        targetEvent.setLocation(event.getLocation());
+        targetEvent.setStart(event.getStart());
+        targetEvent.setEnd(event.getEnd());
+        targetEvent.setReminders(event.getReminders());
+        targetEvent.setStatus("confirmed");
+
+
+        targetEvent.setRecurrence(event.getRecurrence());
+        targetEvent.setRecurringEventId(event.getRecurringEventId());
+
+        // As event sequence number we will take higher number from original event and event being synchronized.
+        // This number needs to increase (or remain same) on all synchronization requests.
+        Integer newSequence = Math.max(nvl(targetEvent.getSequence(), 0), nvl(event.getSequence(), 0));
+        targetEvent.setSequence(newSequence);
+        // https://stackoverflow.com/questions/9691665/google-calendar-api-can-only-update-event-once
+        // https://stackoverflow.com/questions/8574088/google-calendar-api-v3-re-update-issue
+
+        if (! destinationEventColor.equals(""))
+            targetEvent.setColorId(destinationEventColor);
+
+        //targetEvent.setAttendees(filtersAttendees(event.getAttendees())); // do not put attendees to the new synchronized events,
+        // otherwise the invited persons will see duplicate invitations from both of your calendars in their calendar.
+
+        //targetEvent.setICalUID(event.getICalUID()); // never ever put this to new issues, it causes Invalid ID exceptions
     }
 
 
@@ -348,6 +432,11 @@ public class OneWaySync
     }
 
 
+    /**
+     * Converts attendees list into description
+     * @param attendees
+     * @return
+     */
     private static String attendeesToDescription(List<EventAttendee> attendees)
     {
         if (attendees == null)
@@ -365,23 +454,6 @@ public class OneWaySync
         return retVal;
     }
 
-    private static List<EventAttendee> filtersAttendees(List<EventAttendee> attendees)
-    {
-        if (attendees == null)
-            return null;
-
-        List<EventAttendee> newAttendees = new ArrayList<EventAttendee>();
-        newAttendees.addAll(attendees);
-        for (EventAttendee e : newAttendees)
-        {
-            String displayName = e.getDisplayName();
-            if (displayName == null || displayName.equals(""))
-                e.setDisplayName(e.getEmail());
-            e.setEmail(String.format("%s@czechit.net", md5(e.getEmail())));
-        }
-        return newAttendees;
-    } // csas.cz_70726168612d616e74616c61737461736b612d726970@resource.calendar.google.com
-
     /**
      * Closes all connections and saves all data
      */
@@ -391,17 +463,8 @@ public class OneWaySync
         sourceRuntimeSettings.close();
     }
 
-    public static String md5(String input)
-    {
-        try
-        {
-            MessageDigest md = MessageDigest.getInstance("MD5");
-            md.update(input.getBytes());
-            return String.format("%032x", new BigInteger(1, md.digest()));
-        }
-        catch (NoSuchAlgorithmException e)
-        {
-            return "";
-        }
+    public <T> T nvl(T arg0, T arg1) {
+        return (arg0 == null) ? arg1 : arg0;
     }
+
 }
